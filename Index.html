@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Athletic Tracker Pro</title>
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #0a0a0a; --card: #1a1a1a; --accent: #00ff88; 
+            --text: #ffffff; --text-dim: #a0a0a0; --danger: #ff4444;
+        }
+        body { 
+            font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); 
+            margin: 0; padding-bottom: 80px; font-size: 14px;
+        }
+        .header { padding: 20px; border-bottom: 1px solid #333; text-align: center; }
+        .container { padding: 15px; max-width: 600px; margin: auto; }
+        
+        /* Tarjetas */
+        .card { 
+            background: var(--card); border-radius: 12px; padding: 15px; 
+            margin-bottom: 15px; border-left: 4px solid var(--accent);
+        }
+        .card h3 { margin: 0 0 10px 0; display: flex; justify-content: space-between; }
+        
+        /* Formularios */
+        input, select, textarea { 
+            background: #222; border: 1px solid #444; color: white; 
+            padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; margin-bottom: 10px;
+        }
+        .btn { 
+            background: var(--accent); color: black; border: none; padding: 12px; 
+            border-radius: 6px; font-weight: bold; width: 100%; cursor: pointer;
+        }
+        .btn-outline { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+        
+        /* Navegación Inferior */
+        .nav { 
+            position: fixed; bottom: 0; width: 100%; background: #111; 
+            display: flex; justify-content: space-around; padding: 15px 0; border-top: 1px solid #333;
+        }
+        .nav-item { color: var(--text-dim); text-decoration: none; font-size: 12px; text-align: center; }
+        .nav-item.active { color: var(--accent); }
+
+        /* Etiquetas */
+        .badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #333; }
+        .type-cardio { color: #00d4ff; border: 1px solid #00d4ff; }
+        .type-strength { color: var(--accent); border: 1px solid var(--accent); }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2 id="view-title">Dashboard Semanal</h2>
+</div>
+
+<div class="container" id="app-content">
+    </div>
+
+<nav class="nav">
+    <a href="#" class="nav-item active" onclick="showView('dashboard')">🏠<br>Inicio</a>
+    <a href="#" class="nav-item" onclick="showView('history')">📅<br>Historial</a>
+    <a href="#" class="nav-item" onclick="showView('progress')">📈<br>Progreso</a>
+</nav>
+
+<script>
+    // --- PERSISTENCIA ---
+    let workouts = JSON.parse(localStorage.getItem('workouts')) || [];
+
+    function save() {
+        localStorage.setItem('workouts', JSON.stringify(workouts));
+    }
+
+    // --- LÓGICA DE VISTAS ---
+    function showView(view) {
+        const content = document.getElementById('app-content');
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+        
+        if(view === 'dashboard') {
+            renderDashboard(content);
+        } else if(view === 'add-workout') {
+            renderAddWorkout(content);
+        } else if(view === 'progress') {
+            renderProgress(content);
+        }
+    }
+
+    function renderDashboard(container) {
+        container.innerHTML = `
+            <button class="btn" onclick="showView('add-workout')">+ Nueva Sesión</button>
+            <h3 style="margin-top:20px">Últimos Entrenos</h3>
+            <div id="workout-list"></div>
+        `;
+        const list = document.getElementById('workout-list');
+        workouts.slice().reverse().forEach((w, index) => {
+            list.innerHTML += `
+                <div class="card">
+                    <h3>${w.name} <small>${w.date}</small></h3>
+                    <p>${w.exercises.length} ejercicios registrados</p>
+                </div>
+            `;
+        });
+    }
+
+    function renderAddWorkout(container) {
+        container.innerHTML = `
+            <div class="card">
+                <h3>Detalles de Sesión</h3>
+                <input type="date" id="w-date" value="${new Date().toISOString().split('T')[0]}">
+                <input type="text" id="w-name" placeholder="Ej: Empuje / Running Mañana">
+                
+                <hr style="border:0.5px solid #333">
+                
+                <h4>Añadir Ejercicio</h4>
+                <select id="e-type" onchange="toggleType()">
+                    <option value="strength">Fuerza (Pesas)</option>
+                    <option value="cardio">Cardio (Run, Remo, etc)</option>
+                </select>
+                <input type="text" id="e-name" placeholder="Nombre del ejercicio">
+                
+                <div id="form-strength">
+                    <div style="display:flex; gap:10px">
+                        <input type="number" id="e-weight" placeholder="Kg">
+                        <input type="number" id="e-reps" placeholder="Reps">
+                    </div>
+                </div>
+
+                <div id="form-cardio" class="hidden">
+                    <div style="display:flex; gap:10px">
+                        <input type="text" id="e-dist" placeholder="Distancia (km)">
+                        <input type="text" id="e-time" placeholder="Tiempo (mm:ss)">
+                    </div>
+                </div>
+
+                <button class="btn btn-outline" onclick="addExerciseToSession()">+ Añadir a la lista</button>
+                <ul id="temp-exercises" style="margin-top:15px; font-size:12px"></ul>
+                
+                <button class="btn" onclick="saveSession()" style="margin-top:20px">GUARDAR TODO</button>
+            </div>
+        `;
+    }
+
+    let tempExercises = [];
+
+    function toggleType() {
+        const type = document.getElementById('e-type').value;
+        document.getElementById('form-strength').classList.toggle('hidden', type !== 'strength');
+        document.getElementById('form-cardio').classList.toggle('hidden', type !== 'cardio');
+    }
+
+    function addExerciseToSession() {
+        const type = document.getElementById('e-type').value;
+        const name = document.getElementById('e-name').value;
+        let data = {};
+
+        if(type === 'strength') {
+            data = { weight: document.getElementById('e-weight').value, reps: document.getElementById('e-reps').value };
+        } else {
+            const dist = parseFloat(document.getElementById('e-dist').value);
+            const timeStr = document.getElementById('e-time').value; // mm:ss
+            const [m, s] = timeStr.split(':').map(Number);
+            const totalMin = m + (s/60);
+            const pace = (totalMin / dist).toFixed(2); // min/km
+            data = { distance: dist, time: timeStr, pace: pace };
+        }
+
+        tempExercises.push({ name, type, data });
+        document.getElementById('temp-exercises').innerHTML += `<li>${name} (${type})</li>`;
+        // Limpiar
+        document.getElementById('e-name').value = "";
+    }
+
+    function saveSession() {
+        const newWorkout = {
+            id: Date.now(),
+            date: document.getElementById('w-date').value,
+            name: document.getElementById('w-name').value,
+            exercises: tempExercises
+        };
+        workouts.push(newWorkout);
+        save();
+        tempExercises = [];
+        showView('dashboard');
+    }
+
+    function renderProgress(container) {
+        container.innerHTML = `<h3>Tu Evolución</h3><canvas id="chartProgreso"></canvas>`;
+        // Aquí iría la lógica de Chart.js extrayendo datos de 'workouts'
+        // Por brevedad, mostramos el contenedor.
+    }
+
+    // Inicializar
+    showView('dashboard');
+
+    // Registrar Service Worker
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js');
+    }
+</script>
+</body>
+</html>
